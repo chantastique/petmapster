@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -8,8 +9,8 @@ import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
-// The token will be set by user input
-let mapboxToken = '';
+// We'll use the provided token but still allow users to change it if needed
+let mapboxToken = 'pk.eyJ1IjoiY2hhbnRhc3RpcXVlIiwiYSI6ImNtOGtlZXg0ZTA2OXkycXEwdDd4dXY4Z2YifQ.24VO3kT5koNp1fRktApUpA';
 
 interface MapViewProps {
   onSelectPet?: (pet: Pet) => void;
@@ -21,7 +22,7 @@ const MapView: React.FC<MapViewProps> = ({ onSelectPet }) => {
   const { state } = usePetContext();
   const [mapLoaded, setMapLoaded] = useState(false);
   const [tokenError, setTokenError] = useState(false);
-  const [userToken, setUserToken] = useState('');
+  const [userToken, setUserToken] = useState(mapboxToken);
   const markersRef = useRef<{ [key: string]: mapboxgl.Marker }>({});
   
   // Initialize map
@@ -53,7 +54,8 @@ const MapView: React.FC<MapViewProps> = ({ onSelectPet }) => {
 
         map.current.on('error', (e) => {
           console.error('Mapbox error:', e);
-          if (e.error?.status === 401) {
+          // Fix for the TS error - check for unauthorized status in a safer way
+          if (e.error && typeof e.error === 'object' && 'status' in e.error && e.error.status === 401) {
             setTokenError(true);
             if (map.current) {
               map.current.remove();
@@ -166,6 +168,12 @@ const MapView: React.FC<MapViewProps> = ({ onSelectPet }) => {
     if (userToken.trim()) {
       mapboxToken = userToken.trim();
       setTokenError(false);
+      
+      // Remove existing map instance to re-initialize with new token
+      if (map.current) {
+        map.current.remove();
+        map.current = null;
+      }
     }
   };
   
@@ -179,7 +187,7 @@ const MapView: React.FC<MapViewProps> = ({ onSelectPet }) => {
               <h3 className="font-medium">Mapbox Token Required</h3>
             </div>
             <p className="text-sm text-muted-foreground mb-4">
-              Please enter your Mapbox public token to display the map. You can get one by creating an account at <a href="https://mapbox.com" target="_blank" rel="noreferrer" className="text-pet-accent underline">mapbox.com</a>.
+              Please enter your Mapbox public token to display the map. You can get one by creating an account at <a href="https://mapbox.com" target="_blank" rel="noreferrer" className="text-blue-500 underline">mapbox.com</a>.
             </p>
             <form onSubmit={handleTokenSubmit} className="space-y-4">
               <Input 
