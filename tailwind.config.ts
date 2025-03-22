@@ -132,4 +132,11 @@ export default {
 		}
 	},
 	plugins: [require("tailwindcss-animate")],
+	// Add variants for selection
+	variants: {
+		extend: {
+			backgroundColor: ['selection'],
+			textColor: ['selection'],
+		},
+	},
 } satisfies Config;

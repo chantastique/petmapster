@@ -83,8 +83,13 @@
   }
 
   body {
-    @apply bg-background text-foreground antialiased selection:bg-pet-accent/30;
+    @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Custom text selection styling */
+  ::selection {
+    @apply bg-pet-accent/30;
   }
 
   /* Custom scrollbar */
