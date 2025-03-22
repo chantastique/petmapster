@@ -1,4 +1,3 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -121,7 +120,8 @@
   }
   
   .pet-gradient {
-    @apply bg-gradient-to-tr from-pet-dark to-pet-accent text-white;
+    background: linear-gradient(to top right, hsl(var(--pet-dark)), hsl(var(--pet-accent)));
+    @apply text-white;
   }
   
   .grid-pattern {
@@ -176,5 +176,6 @@
 
 .marker-pulse::before {
   content: '';
-  @apply absolute inset-0 rounded-full bg-pet-accent animate-pulse-light;
+  background-color: hsl(var(--pet-accent));
+  @apply absolute inset-0 rounded-full animate-pulse-light;
 }

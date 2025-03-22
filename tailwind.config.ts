@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -62,11 +63,13 @@ export default {
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
 				},
+				// Define concrete color values for pet colors instead of CSS variables
+				// This ensures Tailwind can generate the proper gradient classes
 				pet: {
-					DEFAULT: 'hsl(var(--pet-accent))',
-					light: 'hsl(var(--pet-light))',
-					dark: 'hsl(var(--pet-dark))',
-					muted: 'hsl(var(--pet-muted))'
+					accent: '#3B82F6', // Approximation of --pet-accent in light mode
+					light: '#EFF6FF', // Approximation of --pet-light in light mode
+					dark: '#2563EB',  // Approximation of --pet-dark in light mode
+					muted: '#E2E8F0', // Approximation of --pet-muted in light mode
 				}
 			},
 			borderRadius: {
