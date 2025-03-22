@@ -19,7 +19,7 @@ interface MapViewProps {
 const MapView: React.FC<MapViewProps> = ({ onSelectPet }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
-  const { state } = usePetContext();
+  const { state, setMapFilter } = usePetContext();
   const [mapLoaded, setMapLoaded] = useState(false);
   const [tokenError, setTokenError] = useState(false);
   const [userToken, setUserToken] = useState(mapboxToken);
@@ -212,25 +212,25 @@ const MapView: React.FC<MapViewProps> = ({ onSelectPet }) => {
                 <MapFilterButton
                   label="All"
                   isActive={state.mapFilter === 'all'}
-                  onClick={() => usePetContext().setMapFilter('all')}
+                  onClick={() => setMapFilter('all')}
                   icon={<MapPin className="w-4 h-4" />}
                 />
                 <MapFilterButton
                   label="Cats"
                   isActive={state.mapFilter === 'cats'}
-                  onClick={() => usePetContext().setMapFilter('cats')}
+                  onClick={() => setMapFilter('cats')}
                   icon={<Cat className="w-4 h-4" />}
                 />
                 <MapFilterButton
                   label="Dogs"
                   isActive={state.mapFilter === 'dogs'}
-                  onClick={() => usePetContext().setMapFilter('dogs')}
+                  onClick={() => setMapFilter('dogs')}
                   icon={<Dog className="w-4 h-4" />}
                 />
                 <MapFilterButton
                   label="Other"
                   isActive={state.mapFilter === 'other'}
-                  onClick={() => usePetContext().setMapFilter('other')}
+                  onClick={() => setMapFilter('other')}
                   icon={<Sparkles className="w-4 h-4" />}
                 />
               </div>
