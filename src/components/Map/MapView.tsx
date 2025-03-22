@@ -1,15 +1,15 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { usePetContext } from '@/context/PetContext';
 import { Pet } from '@/types';
-import { MapPin, Cat, Dog, Sparkles } from 'lucide-react';
+import { MapPin, Cat, Dog, Sparkles, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 
-// To use Mapbox in a real app, you would need to set your own token
-// For demo purposes, we're using a temporary token
-mapboxgl.accessToken = 'pk.eyJ1IjoiZGVtb3Rva2VuOTg3NjU0IiwiYSI6ImNscnM3bXE4MzAwd28ya28wcnNteng3MXMifQ.9dGNhAMhgUC_P0tCbZ3AQA';
+// The token will be set by user input
+let mapboxToken = '';
 
 interface MapViewProps {
   onSelectPet?: (pet: Pet) => void;
@@ -20,29 +20,51 @@ const MapView: React.FC<MapViewProps> = ({ onSelectPet }) => {
   const map = useRef<mapboxgl.Map | null>(null);
   const { state } = usePetContext();
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [tokenError, setTokenError] = useState(false);
+  const [userToken, setUserToken] = useState('');
   const markersRef = useRef<{ [key: string]: mapboxgl.Marker }>({});
   
   // Initialize map
   useEffect(() => {
-    if (mapContainer.current && !map.current) {
-      map.current = new mapboxgl.Map({
-        container: mapContainer.current,
-        style: 'mapbox://styles/mapbox/light-v11',
-        center: [-74.006, 40.7128], // Default to NYC
-        zoom: 13
-      });
-      
-      map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
-      map.current.addControl(new mapboxgl.GeolocateControl({
-        positionOptions: {
-          enableHighAccuracy: true
-        },
-        trackUserLocation: true
-      }));
-      
-      map.current.on('load', () => {
-        setMapLoaded(true);
-      });
+    if (!mapContainer.current || !mapboxToken) return;
+    
+    try {
+      if (!map.current) {
+        mapboxgl.accessToken = mapboxToken;
+        
+        map.current = new mapboxgl.Map({
+          container: mapContainer.current,
+          style: 'mapbox://styles/mapbox/light-v11',
+          center: [-74.006, 40.7128], // Default to NYC
+          zoom: 13
+        });
+        
+        map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+        map.current.addControl(new mapboxgl.GeolocateControl({
+          positionOptions: {
+            enableHighAccuracy: true
+          },
+          trackUserLocation: true
+        }));
+        
+        map.current.on('load', () => {
+          setMapLoaded(true);
+        });
+
+        map.current.on('error', (e) => {
+          console.error('Mapbox error:', e);
+          if (e.error?.status === 401) {
+            setTokenError(true);
+            if (map.current) {
+              map.current.remove();
+              map.current = null;
+            }
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error initializing map:', error);
+      setTokenError(true);
     }
     
     return () => {
@@ -51,7 +73,7 @@ const MapView: React.FC<MapViewProps> = ({ onSelectPet }) => {
         map.current = null;
       }
     };
-  }, []);
+  }, [mapboxToken]);
   
   // Add markers when pets data changes
   useEffect(() => {
@@ -138,41 +160,76 @@ const MapView: React.FC<MapViewProps> = ({ onSelectPet }) => {
         return 'bg-purple-500 text-white';
     }
   };
+
+  const handleTokenSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (userToken.trim()) {
+      mapboxToken = userToken.trim();
+      setTokenError(false);
+    }
+  };
   
   return (
     <div className="relative w-full h-full">
-      <div ref={mapContainer} className="absolute inset-0 rounded-lg" />
-      
-      <div className="absolute top-4 left-4 right-4 z-10">
-        <div className="blur-backdrop rounded-xl p-2 shadow-sm">
-          <div className="flex items-center overflow-x-auto no-scrollbar">
-            <MapFilterButton
-              label="All"
-              isActive={state.mapFilter === 'all'}
-              onClick={() => usePetContext().setMapFilter('all')}
-              icon={<MapPin className="w-4 h-4" />}
-            />
-            <MapFilterButton
-              label="Cats"
-              isActive={state.mapFilter === 'cats'}
-              onClick={() => usePetContext().setMapFilter('cats')}
-              icon={<Cat className="w-4 h-4" />}
-            />
-            <MapFilterButton
-              label="Dogs"
-              isActive={state.mapFilter === 'dogs'}
-              onClick={() => usePetContext().setMapFilter('dogs')}
-              icon={<Dog className="w-4 h-4" />}
-            />
-            <MapFilterButton
-              label="Other"
-              isActive={state.mapFilter === 'other'}
-              onClick={() => usePetContext().setMapFilter('other')}
-              icon={<Sparkles className="w-4 h-4" />}
-            />
+      {!mapboxToken || tokenError ? (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="glass-panel p-6 max-w-md w-full">
+            <div className="flex items-center gap-2 text-amber-500 mb-4">
+              <AlertCircle className="h-5 w-5" />
+              <h3 className="font-medium">Mapbox Token Required</h3>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Please enter your Mapbox public token to display the map. You can get one by creating an account at <a href="https://mapbox.com" target="_blank" rel="noreferrer" className="text-pet-accent underline">mapbox.com</a>.
+            </p>
+            <form onSubmit={handleTokenSubmit} className="space-y-4">
+              <Input 
+                value={userToken}
+                onChange={(e) => setUserToken(e.target.value)}
+                placeholder="Enter your Mapbox public token"
+                className="w-full"
+              />
+              <Button type="submit" className="w-full">
+                Load Map
+              </Button>
+            </form>
           </div>
         </div>
-      </div>
+      ) : (
+        <>
+          <div ref={mapContainer} className="absolute inset-0 rounded-lg" />
+          
+          <div className="absolute top-4 left-4 right-4 z-10">
+            <div className="blur-backdrop rounded-xl p-2 shadow-sm">
+              <div className="flex items-center overflow-x-auto no-scrollbar">
+                <MapFilterButton
+                  label="All"
+                  isActive={state.mapFilter === 'all'}
+                  onClick={() => usePetContext().setMapFilter('all')}
+                  icon={<MapPin className="w-4 h-4" />}
+                />
+                <MapFilterButton
+                  label="Cats"
+                  isActive={state.mapFilter === 'cats'}
+                  onClick={() => usePetContext().setMapFilter('cats')}
+                  icon={<Cat className="w-4 h-4" />}
+                />
+                <MapFilterButton
+                  label="Dogs"
+                  isActive={state.mapFilter === 'dogs'}
+                  onClick={() => usePetContext().setMapFilter('dogs')}
+                  icon={<Dog className="w-4 h-4" />}
+                />
+                <MapFilterButton
+                  label="Other"
+                  isActive={state.mapFilter === 'other'}
+                  onClick={() => usePetContext().setMapFilter('other')}
+                  icon={<Sparkles className="w-4 h-4" />}
+                />
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };
