@@ -89,7 +89,7 @@
 
   /* Custom text selection styling */
   ::selection {
-    @apply bg-pet-accent/30;
+    background-color: hsl(var(--pet-accent) / 30%);
   }
 
   /* Custom scrollbar */
