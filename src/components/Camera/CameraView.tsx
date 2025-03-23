@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Camera, X, Cat, Dog, Sparkles, Check, AlertCircle, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -26,6 +25,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onCameraReady }) => {
   const [step, setStep] = useState<'camera' | 'details' | 'location'>('camera');
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
+  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -38,6 +38,12 @@ const CameraView: React.FC<CameraViewProps> = ({ onCameraReady }) => {
   useEffect(() => {
     // Set as mounted
     isMountedRef.current = true;
+    
+    // Create video element on mount
+    if (videoRef.current && isMountedRef.current) {
+      setVideoElement(videoRef.current);
+      console.log("Video element reference set", videoRef.current);
+    }
     
     return () => {
       // Set as unmounted and clean up resources
@@ -53,19 +59,33 @@ const CameraView: React.FC<CameraViewProps> = ({ onCameraReady }) => {
     };
   }, []);
   
+  // Effect to sync videoRef with state
+  useEffect(() => {
+    if (videoRef.current && videoRef.current !== videoElement) {
+      setVideoElement(videoRef.current);
+      console.log("Video element reference updated", videoRef.current);
+    }
+  }, [videoElement]);
+  
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
       try {
         const tracks = streamRef.current.getTracks();
         tracks.forEach(track => track.stop());
         streamRef.current = null;
+        console.log("Camera stopped, tracks closed");
       } catch (error) {
         console.error('Error stopping camera:', error);
       }
     }
     
     if (videoRef.current) {
-      videoRef.current.srcObject = null;
+      try {
+        videoRef.current.srcObject = null;
+        console.log("Video element source cleared");
+      } catch (error) {
+        console.error('Error clearing video source:', error);
+      }
     }
     
     // Only update state if still mounted
@@ -89,36 +109,49 @@ const CameraView: React.FC<CameraViewProps> = ({ onCameraReady }) => {
       setCameraActive(false);
       setIsVideoReady(false);
       
-      // First check: Verify mounted before delay
+      console.log("Camera initialization started");
+      
+      // Ensure there's enough time for React to render the video element
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Check if still mounted
       if (!isMountedRef.current) {
-        console.log('Component unmounted before initialization delay');
+        console.log("Component unmounted during initialization delay");
         return;
       }
       
-      // Make sure DOM is fully rendered
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Check again if component is still mounted after delay
-      if (!isMountedRef.current) return;
-      
-      // Check if video element is available
+      // Ensure video element is available
       if (!videoRef.current) {
-        console.error('Video element not ready during initialization');
+        console.error("Video element ref not available after delay", videoRef);
+        
+        // Try to create a video element programmatically if the ref is not available
+        const tempVideo = document.createElement('video');
+        tempVideo.autoplay = true;
+        tempVideo.playsInline = true;
+        tempVideo.muted = true;
+        
+        console.log("Created temporary video element:", tempVideo);
+        
+        // Check if component is still mounted
+        if (!isMountedRef.current) return;
+        
         if (isMountedRef.current) {
-          setCameraError("Camera initialization failed - video element not ready");
-          toast({
-            variant: "destructive",
-            title: "Camera Error",
-            description: "Video element not ready. Please try again."
-          });
+          setCameraError("Camera initialization issue - using fallback video element");
+          
+          // Use the temporary video element instead
+          const success = await startCamera(tempVideo);
+          
+          if (success && onCameraReady && isMountedRef.current) {
+            onCameraReady();
+          }
         }
         return;
       }
       
-      console.log('Starting camera with video element:', videoRef.current);
+      console.log("Starting camera with video element:", videoRef.current);
       
-      // Start camera access
-      const success = await startCamera();
+      // Start camera with the available video element
+      const success = await startCamera(videoRef.current);
       
       // Notify parent component that camera is ready
       if (success && onCameraReady && isMountedRef.current) {
@@ -148,19 +181,23 @@ const CameraView: React.FC<CameraViewProps> = ({ onCameraReady }) => {
     
     // Only start camera when on camera step and no image captured
     if (step === 'camera' && !capturedImage) {
-      // Simple delay to ensure DOM is ready
+      console.log("Step is 'camera' and no image captured, scheduling camera init");
+      
+      // Clear any previous timeouts
       if (initTimeoutRef.current) {
         window.clearTimeout(initTimeoutRef.current);
       }
       
+      // Schedule camera initialization with a delay
       initTimeoutRef.current = window.setTimeout(() => {
         initTimeoutRef.current = null;
         
         // Check again if still mounted
         if (isMountedRef.current) {
+          console.log("Executing scheduled camera init");
           initCamera();
         }
-      }, 1000); // Increased delay for better DOM initialization
+      }, 1500); // Increased for better DOM initialization
     }
     
     // Clean up camera resources when component unmounts or step changes
@@ -177,9 +214,10 @@ const CameraView: React.FC<CameraViewProps> = ({ onCameraReady }) => {
     };
   }, [step, capturedImage, initCamera, stopCamera]);
   
-  const startCamera = async () => {
+  const startCamera = async (videoElement: HTMLVideoElement) => {
     // Verify component is mounted before proceeding
     if (!isMountedRef.current) {
+      console.log("Component not mounted, aborting startCamera");
       return false;
     }
     
@@ -188,14 +226,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onCameraReady }) => {
       setCameraError(null);
     }
     
-    // Check if videoRef is available before proceeding
-    if (!videoRef.current) {
-      console.error('Video element not available during startCamera');
-      if (isMountedRef.current) {
-        setCameraError('Camera initialization failed - video element not ready');
-      }
-      return false;
-    }
+    console.log("Starting camera with video element:", videoElement);
     
     try {
       const constraints = {
@@ -222,79 +253,75 @@ const CameraView: React.FC<CameraViewProps> = ({ onCameraReady }) => {
       // Store stream in ref for later cleanup
       streamRef.current = stream;
       
-      // Double check if videoRef is still available after async operation
-      if (!videoRef.current || !isMountedRef.current) {
-        // If component unmounted or video element is gone, clean up
-        stream.getTracks().forEach(track => track.stop());
-        console.log('Video element no longer available or component unmounted');
-        return false;
-      }
-      
-      // Set stream to video element
-      videoRef.current.srcObject = stream;
-      
-      // Set up event handlers for video loading
-      const video = videoRef.current;
-      
-      return new Promise<boolean>((resolve) => {
-        const handleCanPlay = () => {
-          video.removeEventListener('canplay', handleCanPlay);
-          video.removeEventListener('error', handleError);
+      // Attach stream to video element
+      try {
+        videoElement.srcObject = stream;
+        console.log("Stream attached to video element:", videoElement);
+        
+        // Set up event handlers for video loading
+        return new Promise<boolean>((resolve) => {
+          const handleCanPlay = () => {
+            videoElement.removeEventListener('canplay', handleCanPlay);
+            videoElement.removeEventListener('error', handleError);
+            
+            if (isMountedRef.current) {
+              setIsVideoReady(true);
+              setCameraActive(true);
+              console.log('Video can play now');
+              resolve(true);
+            } else {
+              resolve(false);
+            }
+          };
           
-          if (isMountedRef.current) {
-            setIsVideoReady(true);
-            setCameraActive(true);
-            console.log('Video can play now');
-            resolve(true);
-          } else {
+          const handleError = () => {
+            videoElement.removeEventListener('canplay', handleCanPlay);
+            videoElement.removeEventListener('error', handleError);
+            
+            if (isMountedRef.current) {
+              setCameraError('Failed to load video stream');
+              setIsVideoReady(false);
+              setCameraActive(false);
+            }
             resolve(false);
-          }
-        };
-        
-        const handleError = () => {
-          video.removeEventListener('canplay', handleCanPlay);
-          video.removeEventListener('error', handleError);
+          };
           
-          if (isMountedRef.current) {
-            setCameraError('Failed to load video stream');
-            setIsVideoReady(false);
-            setCameraActive(false);
+          // If already ready
+          if (videoElement.readyState >= 3) { // HAVE_FUTURE_DATA or higher
+            if (isMountedRef.current) {
+              setIsVideoReady(true);
+              setCameraActive(true);
+              console.log('Video ready immediately');
+            }
+            resolve(true);
+            return;
           }
-          resolve(false);
-        };
-        
-        // If already ready
-        if (video.readyState >= 3) { // HAVE_FUTURE_DATA or higher
-          if (isMountedRef.current) {
-            setIsVideoReady(true);
-            setCameraActive(true);
-            console.log('Video ready immediately');
-          }
-          resolve(true);
-          return;
-        }
-        
-        // Otherwise wait for canplay event
-        video.addEventListener('canplay', handleCanPlay);
-        video.addEventListener('error', handleError);
-        
-        // Start playing
-        video.play().catch(error => {
-          console.error('Error playing video:', error);
-          handleError();
-        });
-        
-        // Set a timeout to resolve if canplay doesn't fire
-        setTimeout(() => {
-          if (isMountedRef.current && video.readyState >= 2) { // At least HAVE_CURRENT_DATA
-            console.log('Forcing camera ready after timeout');
-            handleCanPlay();
-          } else if (isMountedRef.current) {
-            console.log('Camera failed to initialize within timeout');
+          
+          // Otherwise wait for canplay event
+          videoElement.addEventListener('canplay', handleCanPlay);
+          videoElement.addEventListener('error', handleError);
+          
+          // Start playing
+          videoElement.play().catch(error => {
+            console.error('Error playing video:', error);
             handleError();
-          }
-        }, 5000); // Increased timeout for slower devices
-      });
+          });
+          
+          // Set a timeout to resolve if canplay doesn't fire
+          setTimeout(() => {
+            if (isMountedRef.current && videoElement.readyState >= 2) { // At least HAVE_CURRENT_DATA
+              console.log('Forcing camera ready after timeout');
+              handleCanPlay();
+            } else if (isMountedRef.current) {
+              console.log('Camera failed to initialize within timeout');
+              handleError();
+            }
+          }, 7000); // Increased timeout for slower devices
+        });
+      } catch (error) {
+        console.error("Error attaching stream to video element:", error);
+        throw error;
+      }
     } catch (err) {
       console.error('Error accessing camera:', err);
       let errorMessage = 'Could not access camera';

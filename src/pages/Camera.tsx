@@ -47,7 +47,7 @@ const Camera = () => {
       if (mountRef.current) {
         checkCameraSupport();
       }
-    }, 500);
+    }, 1000); // Increased from 500ms to 1000ms
 
     return () => {
       mountRef.current = false;
@@ -76,7 +76,7 @@ const Camera = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <main className="flex-1 relative">
-        {isLoading && browserSupport !== null && (
+        {isLoading && browserSupport !== false && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm z-10 p-6">
             <p className="mb-4 text-center font-medium">Initializing camera...</p>
             <Progress value={65} className="w-64 h-2" />
