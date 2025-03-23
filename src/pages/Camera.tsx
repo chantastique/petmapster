@@ -82,7 +82,7 @@ const Camera = () => {
             <Progress value={65} className="w-64 h-2" />
           </div>
         )}
-        {browserSupport && isMounted && <CameraView onCameraReady={() => setIsLoading(false)} />}
+        {browserSupport === true && isMounted && <CameraView onCameraReady={() => setIsLoading(false)} />}
       </main>
       <Navbar />
     </div>
