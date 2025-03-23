@@ -25,10 +25,10 @@ const Camera = () => {
       return true;
     };
 
-    // Delay the camera support check slightly to ensure browser is ready
+    // Delay the camera support check to ensure browser is ready
     const timerId = setTimeout(() => {
       checkCameraSupport();
-    }, 500);
+    }, 800); // Increased delay to ensure browser is fully ready
 
     return () => clearTimeout(timerId);
   }, []);
