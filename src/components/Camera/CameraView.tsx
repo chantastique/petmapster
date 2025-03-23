@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Camera, X, Cat, Dog, Sparkles, Check, AlertCircle, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -8,7 +7,11 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 
-const CameraView: React.FC = () => {
+interface CameraViewProps {
+  onCameraReady?: () => void;
+}
+
+const CameraView: React.FC<CameraViewProps> = ({ onCameraReady }) => {
   // Mount status tracker
   const isMountedRef = useRef(true);
   
@@ -91,24 +94,6 @@ const CameraView: React.FC = () => {
         return;
       }
       
-      // Delay to ensure DOM is ready
-      await new Promise(resolve => {
-        if (initTimeoutRef.current) {
-          window.clearTimeout(initTimeoutRef.current);
-        }
-        
-        initTimeoutRef.current = window.setTimeout(() => {
-          initTimeoutRef.current = null;
-          resolve(true);
-        }, 300);
-      });
-      
-      // Second check: Verify mounted after delay
-      if (!isMountedRef.current) {
-        console.log('Component unmounted during initialization delay');
-        return;
-      }
-      
       // Check if video element is available
       if (!videoRef.current) {
         if (isMountedRef.current) {
@@ -122,7 +107,13 @@ const CameraView: React.FC = () => {
         return;
       }
       
-      await startCamera();
+      // Start camera access
+      const success = await startCamera();
+      
+      // Notify parent component that camera is ready
+      if (success && onCameraReady && isMountedRef.current) {
+        onCameraReady();
+      }
     } catch (err) {
       console.error('Failed in initCamera:', err);
       if (isMountedRef.current) {
@@ -139,7 +130,7 @@ const CameraView: React.FC = () => {
         setIsInitializing(false);
       }
     }
-  }, [isInitializing]);
+  }, [isInitializing, onCameraReady]);
   
   useEffect(() => {
     // Check if component is still mounted before proceeding
@@ -147,7 +138,7 @@ const CameraView: React.FC = () => {
     
     // Only start camera when on camera step and no image captured
     if (step === 'camera' && !capturedImage) {
-      // Add a delay to ensure DOM is fully rendered
+      // Simple delay to ensure DOM is ready
       if (initTimeoutRef.current) {
         window.clearTimeout(initTimeoutRef.current);
       }
@@ -159,7 +150,7 @@ const CameraView: React.FC = () => {
         if (isMountedRef.current) {
           initCamera();
         }
-      }, 500);
+      }, 300);
     }
     
     // Clean up camera resources when component unmounts or step changes
@@ -179,7 +170,7 @@ const CameraView: React.FC = () => {
   const startCamera = async () => {
     // Verify component is mounted before proceeding
     if (!isMountedRef.current) {
-      throw new Error('Camera initialization failed - component was unmounted');
+      return false;
     }
     
     // Clear any previous errors
@@ -193,7 +184,7 @@ const CameraView: React.FC = () => {
       if (isMountedRef.current) {
         setCameraError('Camera initialization failed - video element not ready');
       }
-      return;
+      return false;
     }
     
     try {
@@ -215,7 +206,7 @@ const CameraView: React.FC = () => {
         // If component unmounted, clean up the stream
         stream.getTracks().forEach(track => track.stop());
         console.log('Component unmounted after getUserMedia');
-        return;
+        return false;
       }
       
       // Store stream in ref for later cleanup
@@ -226,85 +217,74 @@ const CameraView: React.FC = () => {
         // If component unmounted or video element is gone, clean up
         stream.getTracks().forEach(track => track.stop());
         console.log('Video element no longer available or component unmounted');
-        return;
+        return false;
       }
       
       // Set stream to video element
       videoRef.current.srcObject = stream;
       
-      // Wait for video to be ready with a timeout
-      try {
-        await Promise.race([
-          new Promise<void>((resolve) => {
-            const video = videoRef.current;
-            if (!video) {
-              throw new Error('Video element not available');
-            }
-            
-            // If metadata already loaded
-            if (video.readyState >= 1) {
-              resolve();
-              return;
-            }
-            
-            // Add event listeners for successful load and errors
-            const handleLoaded = () => {
-              resolve();
-              video.removeEventListener('loadedmetadata', handleLoaded);
-              video.removeEventListener('error', handleError);
-            };
-            
-            const handleError = (e: Event) => {
-              video.removeEventListener('loadedmetadata', handleLoaded);
-              video.removeEventListener('error', handleError);
-              throw new Error(`Video load error: ${e.type}`);
-            };
-            
-            video.addEventListener('loadedmetadata', handleLoaded);
-            video.addEventListener('error', handleError);
-          }),
-          new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Video metadata loading timed out')), 5000)
-          )
-        ]);
-      } catch (metadataError) {
-        console.error('Error loading video metadata:', metadataError);
-        
-        // Check if still mounted
-        if (!isMountedRef.current) return;
-        
-        setCameraError('Camera metadata loading failed');
-        stopCamera();
-        return;
-      }
+      // Set up event handlers for video loading
+      const video = videoRef.current;
       
-      // Check if component is still mounted
-      if (!isMountedRef.current || !videoRef.current) {
-        console.log('Component unmounted or video element gone after metadata loading');
-        stopCamera();
-        return;
-      }
-      
-      // Start playing the video
-      try {
-        await videoRef.current.play();
+      return new Promise<boolean>((resolve) => {
+        const handleCanPlay = () => {
+          video.removeEventListener('canplay', handleCanPlay);
+          video.removeEventListener('error', handleError);
+          
+          if (isMountedRef.current) {
+            setIsVideoReady(true);
+            setCameraActive(true);
+            console.log('Video can play now');
+            resolve(true);
+          } else {
+            resolve(false);
+          }
+        };
         
-        // Final check if still mounted
-        if (!isMountedRef.current) return;
+        const handleError = () => {
+          video.removeEventListener('canplay', handleCanPlay);
+          video.removeEventListener('error', handleError);
+          
+          if (isMountedRef.current) {
+            setCameraError('Failed to load video stream');
+            setIsVideoReady(false);
+            setCameraActive(false);
+          }
+          resolve(false);
+        };
         
-        setIsVideoReady(true);
-        setCameraActive(true);
-      } catch (playError) {
-        console.error('Error playing video:', playError);
+        // If already ready
+        if (video.readyState >= 3) { // HAVE_FUTURE_DATA or higher
+          if (isMountedRef.current) {
+            setIsVideoReady(true);
+            setCameraActive(true);
+            console.log('Video ready immediately');
+          }
+          resolve(true);
+          return;
+        }
         
-        // Check if still mounted 
-        if (!isMountedRef.current) return;
+        // Otherwise wait for canplay event
+        video.addEventListener('canplay', handleCanPlay);
+        video.addEventListener('error', handleError);
         
-        setCameraError('Could not play video stream');
-        stopCamera();
-      }
-      
-      return true;
+        // Start playing
+        video.play().catch(error => {
+          console.error('Error playing video:', error);
+          handleError();
+        });
+        
+        // Set a timeout to resolve if canplay doesn't fire
+        setTimeout(() => {
+          if (isMountedRef.current && video.readyState >= 2) { // At least HAVE_CURRENT_DATA
+            console.log('Forcing camera ready after timeout');
+            handleCanPlay();
+          } else if (isMountedRef.current) {
+            console.log('Camera failed to initialize within timeout');
+            handleError();
+          }
+        }, 3000);
+      });
     } catch (err) {
       console.error('Error accessing camera:', err);
       let errorMessage = 'Could not access camera';
@@ -328,19 +308,19 @@ const CameraView: React.FC = () => {
       stopCamera();
       
       // Final check if still mounted
-      if (!isMountedRef.current) return;
+      if (isMountedRef.current) {
+        setCameraError(errorMessage);
+        setCameraActive(false);
+        setIsVideoReady(false);
+        
+        toast({
+          variant: "destructive",
+          title: "Camera Error",
+          description: errorMessage
+        });
+      }
       
-      setCameraError(errorMessage);
-      setCameraActive(false);
-      setIsVideoReady(false);
-      
-      toast({
-        variant: "destructive",
-        title: "Camera Error",
-        description: errorMessage
-      });
-      
-      throw new Error(errorMessage);
+      return false;
     }
   };
   

@@ -5,16 +5,19 @@ import Navbar from '@/components/Layout/Navbar';
 import { toast } from '@/hooks/use-toast';
 import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
 
 const Camera = () => {
   const [browserSupport, setBrowserSupport] = useState<boolean | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const mountRef = useRef(true);
 
   useEffect(() => {
     // Set component as mounted
     setIsMounted(true);
     mountRef.current = true;
+    setIsLoading(true);
     
     // Check if the browser supports the camera API
     const checkCameraSupport = () => {
@@ -34,16 +37,17 @@ const Camera = () => {
       
       if (mountRef.current) {
         setBrowserSupport(true);
+        setIsLoading(false);
       }
       return true;
     };
 
-    // Delay the camera support check to ensure browser is ready
+    // Give the browser a moment to initialize
     const timerId = setTimeout(() => {
       if (mountRef.current) {
         checkCameraSupport();
       }
-    }, 1000);
+    }, 500);
 
     return () => {
       mountRef.current = false;
@@ -72,7 +76,13 @@ const Camera = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <main className="flex-1 relative">
-        {browserSupport && isMounted && <CameraView />}
+        {isLoading && browserSupport !== false && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm z-10 p-6">
+            <p className="mb-4 text-center font-medium">Initializing camera...</p>
+            <Progress value={65} className="w-64 h-2" />
+          </div>
+        )}
+        {browserSupport && isMounted && <CameraView onCameraReady={() => setIsLoading(false)} />}
       </main>
       <Navbar />
     </div>
