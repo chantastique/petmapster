@@ -16,7 +16,7 @@ export const MapFilterButtons: React.FC<MapFilterButtonsProps> = ({
   return (
     <div className="absolute top-4 left-4 right-4 z-10">
       <div className="blur-backdrop rounded-xl p-2 shadow-sm">
-        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+        <div className="flex items-center justify-center sm:justify-start gap-2">
           <MapFilterButton
             label="All"
             isActive={currentFilter === 'all'}
@@ -64,14 +64,14 @@ export const MapFilterButton: React.FC<MapFilterButtonProps> = ({
     <button
       onClick={onClick}
       className={cn(
-        "flex items-center px-3 py-2 rounded-lg transition-all whitespace-nowrap",
+        "flex flex-col items-center px-3 py-2 rounded-lg transition-all",
         isActive 
           ? "pet-gradient text-white shadow-sm" 
           : "bg-background text-muted-foreground hover:bg-muted"
       )}
     >
-      <span className="mr-2">{icon}</span>
-      <span className="text-sm font-medium">{label}</span>
+      <span className="mb-1">{icon}</span>
+      <span className="text-xs font-medium">{label}</span>
     </button>
   );
 };
