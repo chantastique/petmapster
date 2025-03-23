@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, X, Cat, Dog, Sparkles, Check, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -92,7 +91,7 @@ const CameraView: React.FC = () => {
           if (!isVideoReady) {
             console.warn('Video element failed to initialize in time');
             toast({
-              variant: "warning",
+              variant: "default", // Changed from "warning" to "default"
               title: "Camera is taking longer than expected",
               description: "Please wait or try refreshing the page"
             });
