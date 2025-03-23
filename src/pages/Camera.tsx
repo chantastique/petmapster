@@ -56,7 +56,7 @@ const Camera = () => {
     };
   }, []);
 
-  // Fix: Use strict equality comparison (===) instead of comparing boolean types directly
+  // Fix: Use strict equality comparison (===) instead of loosely comparing boolean types
   if (browserSupport === false) {
     return (
       <div className="min-h-screen flex flex-col">
