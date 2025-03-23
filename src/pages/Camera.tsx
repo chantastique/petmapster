@@ -8,8 +8,12 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const Camera = () => {
   const [browserSupport, setBrowserSupport] = useState<boolean | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
+    // Set component as mounted
+    setIsMounted(true);
+    
     // Check if the browser supports the camera API
     const checkCameraSupport = () => {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -28,9 +32,12 @@ const Camera = () => {
     // Delay the camera support check to ensure browser is ready
     const timerId = setTimeout(() => {
       checkCameraSupport();
-    }, 800); // Increased delay to ensure browser is fully ready
+    }, 1000); // Increased delay to ensure browser is fully ready
 
-    return () => clearTimeout(timerId);
+    return () => {
+      clearTimeout(timerId);
+      setIsMounted(false); // Set component as unmounted
+    };
   }, []);
 
   if (browserSupport === false) {
@@ -53,7 +60,7 @@ const Camera = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <main className="flex-1 relative">
-        {browserSupport && <CameraView />}
+        {browserSupport && isMounted && <CameraView />}
       </main>
       <Navbar />
     </div>
