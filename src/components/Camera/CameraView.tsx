@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { usePetContext } from '@/context/PetContext';
 import { Pet } from '@/types';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { toast } from '@/components/ui/use-toast';
+import { toast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 
 const CameraView: React.FC = () => {
@@ -26,15 +26,25 @@ const CameraView: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const initTimeoutRef = useRef<number | null>(null);
   
   const { addPet } = usePetContext();
   
   // Set isMountedRef to false when component unmounts
   useEffect(() => {
+    // Set as mounted
     isMountedRef.current = true;
     
     return () => {
+      // Set as unmounted and clean up resources
       isMountedRef.current = false;
+      
+      // Clear any pending timeouts
+      if (initTimeoutRef.current) {
+        window.clearTimeout(initTimeoutRef.current);
+        initTimeoutRef.current = null;
+      }
+      
       stopCamera();
     };
   }, []);
@@ -54,6 +64,7 @@ const CameraView: React.FC = () => {
       videoRef.current.srcObject = null;
     }
     
+    // Only update state if still mounted
     if (isMountedRef.current) {
       setIsVideoReady(false);
       setCameraActive(false);
@@ -66,15 +77,33 @@ const CameraView: React.FC = () => {
     if (isInitializing || !isMountedRef.current) return;
     
     try {
+      // If not mounted, exit immediately
+      if (!isMountedRef.current) return;
+      
       setIsInitializing(true);
       setCameraError(null);
       setCameraActive(false);
       setIsVideoReady(false);
       
-      // Delay to ensure DOM is ready
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // First check: Verify mounted before delay
+      if (!isMountedRef.current) {
+        console.log('Component unmounted before initialization delay');
+        return;
+      }
       
-      // Check if component is still mounted
+      // Delay to ensure DOM is ready
+      await new Promise(resolve => {
+        if (initTimeoutRef.current) {
+          window.clearTimeout(initTimeoutRef.current);
+        }
+        
+        initTimeoutRef.current = window.setTimeout(() => {
+          initTimeoutRef.current = null;
+          resolve(true);
+        }, 300);
+      });
+      
+      // Second check: Verify mounted after delay
       if (!isMountedRef.current) {
         console.log('Component unmounted during initialization delay');
         return;
@@ -113,12 +142,20 @@ const CameraView: React.FC = () => {
   }, [isInitializing]);
   
   useEffect(() => {
-    let initTimeout: number;
+    // Check if component is still mounted before proceeding
+    if (!isMountedRef.current) return;
     
-    // Only start camera when on camera step, no image captured, and component is mounted
-    if (step === 'camera' && !capturedImage && isMountedRef.current) {
+    // Only start camera when on camera step and no image captured
+    if (step === 'camera' && !capturedImage) {
       // Add a delay to ensure DOM is fully rendered
-      initTimeout = window.setTimeout(() => {
+      if (initTimeoutRef.current) {
+        window.clearTimeout(initTimeoutRef.current);
+      }
+      
+      initTimeoutRef.current = window.setTimeout(() => {
+        initTimeoutRef.current = null;
+        
+        // Check again if still mounted
         if (isMountedRef.current) {
           initCamera();
         }
@@ -127,21 +164,27 @@ const CameraView: React.FC = () => {
     
     // Clean up camera resources when component unmounts or step changes
     return () => {
-      window.clearTimeout(initTimeout);
-      stopCamera();
+      if (initTimeoutRef.current) {
+        window.clearTimeout(initTimeoutRef.current);
+        initTimeoutRef.current = null;
+      }
+      
+      // Only stop camera if changing steps or unmounting
+      if (step !== 'camera' || !isMountedRef.current) {
+        stopCamera();
+      }
     };
   }, [step, capturedImage, initCamera, stopCamera]);
   
   const startCamera = async () => {
+    // Verify component is mounted before proceeding
+    if (!isMountedRef.current) {
+      throw new Error('Camera initialization failed - component was unmounted');
+    }
+    
     // Clear any previous errors
     if (isMountedRef.current) {
       setCameraError(null);
-    }
-    
-    // Check if component is still mounted
-    if (!isMountedRef.current) {
-      console.log('Component unmounted before startCamera');
-      return;
     }
     
     // Check if videoRef is available before proceeding
@@ -226,9 +269,11 @@ const CameraView: React.FC = () => {
         ]);
       } catch (metadataError) {
         console.error('Error loading video metadata:', metadataError);
-        if (isMountedRef.current) {
-          setCameraError('Camera metadata loading failed');
-        }
+        
+        // Check if still mounted
+        if (!isMountedRef.current) return;
+        
+        setCameraError('Camera metadata loading failed');
         stopCamera();
         return;
       }
@@ -243,15 +288,19 @@ const CameraView: React.FC = () => {
       // Start playing the video
       try {
         await videoRef.current.play();
-        if (isMountedRef.current) {
-          setIsVideoReady(true);
-          setCameraActive(true);
-        }
+        
+        // Final check if still mounted
+        if (!isMountedRef.current) return;
+        
+        setIsVideoReady(true);
+        setCameraActive(true);
       } catch (playError) {
         console.error('Error playing video:', playError);
-        if (isMountedRef.current) {
-          setCameraError('Could not play video stream');
-        }
+        
+        // Check if still mounted 
+        if (!isMountedRef.current) return;
+        
+        setCameraError('Could not play video stream');
         stopCamera();
       }
       
@@ -278,17 +327,18 @@ const CameraView: React.FC = () => {
       // Clean up any partially initialized camera
       stopCamera();
       
-      if (isMountedRef.current) {
-        setCameraError(errorMessage);
-        setCameraActive(false);
-        setIsVideoReady(false);
-        
-        toast({
-          variant: "destructive",
-          title: "Camera Error",
-          description: errorMessage
-        });
-      }
+      // Final check if still mounted
+      if (!isMountedRef.current) return;
+      
+      setCameraError(errorMessage);
+      setCameraActive(false);
+      setIsVideoReady(false);
+      
+      toast({
+        variant: "destructive",
+        title: "Camera Error",
+        description: errorMessage
+      });
       
       throw new Error(errorMessage);
     }
