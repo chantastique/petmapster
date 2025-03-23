@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, X, Cat, Dog, Sparkles, Check, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -5,6 +6,7 @@ import { usePetContext } from '@/context/PetContext';
 import { Pet } from '@/types';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from '@/components/ui/use-toast';
+import { Button } from '@/components/ui/button';
 
 const CameraView: React.FC = () => {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
@@ -15,6 +17,7 @@ const CameraView: React.FC = () => {
   const [petDescription, setPetDescription] = useState('');
   const [petRating, setPetRating] = useState(5);
   const [step, setStep] = useState<'camera' | 'details' | 'location'>('camera');
+  const [isVideoReady, setIsVideoReady] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -27,12 +30,19 @@ const CameraView: React.FC = () => {
       const initCamera = async () => {
         try {
           setCameraError(null);
+          setCameraActive(false);
+          setIsVideoReady(false);
           await startCamera();
         } catch (err) {
           console.error('Failed to initialize camera:', err);
           const errorMsg = err instanceof Error ? err.message : 'Unknown camera error';
           setCameraError(errorMsg);
           setCameraActive(false);
+          toast({
+            variant: "destructive",
+            title: "Camera Error",
+            description: errorMsg
+          });
         }
       };
       
@@ -50,11 +60,16 @@ const CameraView: React.FC = () => {
     setCameraError(null);
     
     try {
+      // First check if videoRef is actually available
+      if (!videoRef.current) {
+        throw new Error('Camera initialization failed - video element not ready');
+      }
+      
       const constraints = {
         video: {
           facingMode: 'environment',
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
         },
         audio: false
       };
@@ -63,15 +78,30 @@ const CameraView: React.FC = () => {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       console.log('Camera access granted', stream);
       
+      // Check again to make sure videoRef is still available
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        setCameraActive(true);
-        toast({
-          title: "Camera activated",
-          description: "Camera is now ready to use"
-        });
+        videoRef.current.onloadedmetadata = () => {
+          console.log('Video metadata loaded');
+          setIsVideoReady(true);
+          setCameraActive(true);
+        };
+        
+        // Set a timeout to detect if video never becomes ready
+        const timeoutId = setTimeout(() => {
+          if (!isVideoReady) {
+            console.warn('Video element failed to initialize in time');
+            toast({
+              variant: "warning",
+              title: "Camera is taking longer than expected",
+              description: "Please wait or try refreshing the page"
+            });
+          }
+        }, 5000);
+        
+        return () => clearTimeout(timeoutId);
       } else {
-        throw new Error('Video element not available');
+        throw new Error('Video element not available after stream initialization');
       }
     } catch (err) {
       console.error('Error accessing camera:', err);
@@ -87,6 +117,8 @@ const CameraView: React.FC = () => {
           errorMessage = 'Camera is in use by another application.';
         } else if (err.name === 'OverconstrainedError') {
           errorMessage = 'Camera constraints not satisfied.';
+        } else {
+          errorMessage = err.message || 'Could not access camera';
         }
       }
       
@@ -104,29 +136,33 @@ const CameraView: React.FC = () => {
   
   const stopCamera = () => {
     if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      const tracks = stream.getTracks();
-      
-      tracks.forEach(track => track.stop());
-      videoRef.current.srcObject = null;
-      setCameraActive(false);
+      try {
+        const stream = videoRef.current.srcObject as MediaStream;
+        const tracks = stream.getTracks();
+        
+        tracks.forEach(track => track.stop());
+        videoRef.current.srcObject = null;
+        setIsVideoReady(false);
+        setCameraActive(false);
+      } catch (error) {
+        console.error('Error stopping camera:', error);
+      }
     }
   };
   
   const captureImage = () => {
+    if (!isVideoReady || !cameraActive) {
+      toast({
+        variant: "destructive",
+        title: "Camera not ready",
+        description: "Please wait for the camera to initialize fully"
+      });
+      return;
+    }
+    
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      
-      // Make sure video is loaded before attempting to capture
-      if (video.readyState !== 4) {
-        toast({
-          variant: "destructive",
-          title: "Camera not ready",
-          description: "Please wait for the camera to initialize fully"
-        });
-        return;
-      }
       
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
@@ -241,7 +277,6 @@ const CameraView: React.FC = () => {
                   autoPlay
                   playsInline
                   muted
-                  onLoadedMetadata={() => console.log('Video element loaded')}
                   className="absolute inset-0 w-full h-full object-cover"
                 />
                 <div className="absolute inset-0 flex items-center justify-center">
@@ -250,9 +285,10 @@ const CameraView: React.FC = () => {
                 <div className="absolute bottom-8 left-0 right-0 flex justify-center items-center">
                   <button 
                     onClick={captureImage} 
-                    className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center"
+                    disabled={!isVideoReady}
+                    className={`w-16 h-16 rounded-full ${isVideoReady ? 'bg-white/20 backdrop-blur-sm' : 'bg-gray-400/20'} flex items-center justify-center`}
                   >
-                    <span className="w-12 h-12 rounded-full bg-white shadow-md" />
+                    <span className={`w-12 h-12 rounded-full ${isVideoReady ? 'bg-white' : 'bg-gray-400'} shadow-md`} />
                   </button>
                 </div>
               </>
@@ -263,12 +299,13 @@ const CameraView: React.FC = () => {
                 <p className="text-lg font-medium mb-4">
                   {cameraError ? 'Camera access failed' : 'Camera access required'}
                 </p>
-                <button
+                <Button
                   onClick={startCamera}
+                  variant="default"
                   className="pet-gradient px-6 py-3 rounded-full text-white shadow-md"
                 >
                   {cameraError ? 'Try Again' : 'Enable Camera'}
-                </button>
+                </Button>
               </div>
             )}
           </motion.div>
