@@ -7,9 +7,10 @@ import { Pet } from '@/types';
 import { TokenInput } from './TokenInput';
 import { MapFilterButtons } from './MapFilterButtons';
 import { MarkerRenderer } from './MarkerRenderer';
+import { toast } from '@/components/ui/use-toast';
 
-// We'll use the provided token but still allow users to change it if needed
-let mapboxToken = 'pk.eyJ1IjoiY2hhbnRhc3RpcXVlIiwiYSI6ImNtOGtlZXg0ZTA2OXkycXEwdDd4dXY4Z2YifQ.24VO3kT5koNp1fRktApUpA';
+// Default token
+const DEFAULT_MAPBOX_TOKEN = 'pk.eyJ1IjoiY2hhbnRhc3RpcXVlIiwiYSI6ImNtOGtlZXg0ZTA2OXkycXEwdDd4dXY4Z2YifQ.24VO3kT5koNp1fRktApUpA';
 
 interface MapViewProps {
   onSelectPet?: (pet: Pet) => void;
@@ -21,58 +22,84 @@ const MapView: React.FC<MapViewProps> = ({ onSelectPet }) => {
   const { state, setMapFilter } = usePetContext();
   const [mapLoaded, setMapLoaded] = useState(false);
   const [tokenError, setTokenError] = useState(false);
-  const [userToken, setUserToken] = useState(mapboxToken);
+  const [userToken, setUserToken] = useState(DEFAULT_MAPBOX_TOKEN);
+  const [mapboxToken, setMapboxToken] = useState(DEFAULT_MAPBOX_TOKEN);
   
-  // Initialize map
+  // Clear any previous map instance when component unmounts
   useEffect(() => {
-    if (!mapContainer.current || !mapboxToken) return;
-    
-    try {
-      if (!map.current) {
-        mapboxgl.accessToken = mapboxToken;
-        
-        map.current = new mapboxgl.Map({
-          container: mapContainer.current,
-          style: 'mapbox://styles/mapbox/light-v11',
-          center: [-74.006, 40.7128], // Default to NYC
-          zoom: 13
-        });
-        
-        map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
-        map.current.addControl(new mapboxgl.GeolocateControl({
-          positionOptions: {
-            enableHighAccuracy: true
-          },
-          trackUserLocation: true
-        }));
-        
-        map.current.on('load', () => {
-          setMapLoaded(true);
-        });
-
-        map.current.on('error', (e) => {
-          console.error('Mapbox error:', e);
-          // Fix for the TS error - check for unauthorized status in a safer way
-          if (e.error && typeof e.error === 'object' && 'status' in e.error && e.error.status === 401) {
-            setTokenError(true);
-            if (map.current) {
-              map.current.remove();
-              map.current = null;
-            }
-          }
-        });
-      }
-    } catch (error) {
-      console.error('Error initializing map:', error);
-      setTokenError(true);
-    }
-    
     return () => {
       if (map.current) {
         map.current.remove();
         map.current = null;
       }
     };
+  }, []);
+
+  // Initialize map with the current token
+  useEffect(() => {
+    if (!mapContainer.current || !mapboxToken) return;
+    
+    // Clean up any existing map before creating a new one
+    if (map.current) {
+      map.current.remove();
+      map.current = null;
+      setMapLoaded(false);
+    }
+    
+    try {
+      mapboxgl.accessToken = mapboxToken;
+      
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: 'mapbox://styles/mapbox/light-v11',
+        center: [-74.006, 40.7128], // Default to NYC
+        zoom: 13
+      });
+      
+      map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+      map.current.addControl(new mapboxgl.GeolocateControl({
+        positionOptions: {
+          enableHighAccuracy: true
+        },
+        trackUserLocation: true
+      }));
+      
+      map.current.on('load', () => {
+        setMapLoaded(true);
+        console.log('Map loaded successfully');
+        toast({
+          title: "Map loaded",
+          description: "Mapbox map initialized successfully",
+        });
+      });
+
+      map.current.on('error', (e: any) => {
+        console.error('Mapbox error:', e);
+        
+        // Check for authorization errors
+        if (e.error && typeof e.error === 'object' && 'status' in e.error && e.error.status === 401) {
+          setTokenError(true);
+          toast({
+            title: "Map Error",
+            description: "Invalid Mapbox token. Please try again.",
+            variant: "destructive"
+          });
+          
+          if (map.current) {
+            map.current.remove();
+            map.current = null;
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error initializing map:', error);
+      setTokenError(true);
+      toast({
+        title: "Map Error",
+        description: "Failed to initialize Mapbox map",
+        variant: "destructive"
+      });
+    }
   }, [mapboxToken]);
 
   const handleTokenChange = (token: string) => {
@@ -82,20 +109,18 @@ const MapView: React.FC<MapViewProps> = ({ onSelectPet }) => {
   const handleTokenSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (userToken.trim()) {
-      mapboxToken = userToken.trim();
+      setMapboxToken(userToken.trim());
       setTokenError(false);
-      
-      // Remove existing map instance to re-initialize with new token
-      if (map.current) {
-        map.current.remove();
-        map.current = null;
-      }
+      toast({
+        title: "Token Updated",
+        description: "Trying to load map with new token",
+      });
     }
   };
   
   return (
     <div className="relative w-full h-full">
-      {!mapboxToken || tokenError ? (
+      {tokenError ? (
         <TokenInput 
           token={userToken}
           onTokenChange={handleTokenChange}
