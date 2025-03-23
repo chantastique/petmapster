@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, X, Cat, Dog, Sparkles, Check, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -31,17 +32,27 @@ const CameraView: React.FC = () => {
           setCameraError(null);
           setCameraActive(false);
           setIsVideoReady(false);
-          await startCamera();
+          
+          // Wait for the DOM to be fully rendered before accessing videoRef
+          requestAnimationFrame(async () => {
+            try {
+              await startCamera();
+            } catch (err) {
+              console.error('Failed to initialize camera:', err);
+              const errorMsg = err instanceof Error ? err.message : 'Unknown camera error';
+              setCameraError(errorMsg);
+              setCameraActive(false);
+              toast({
+                variant: "destructive",
+                title: "Camera Error",
+                description: errorMsg
+              });
+            }
+          });
         } catch (err) {
-          console.error('Failed to initialize camera:', err);
+          console.error('Failed in initCamera:', err);
           const errorMsg = err instanceof Error ? err.message : 'Unknown camera error';
           setCameraError(errorMsg);
-          setCameraActive(false);
-          toast({
-            variant: "destructive",
-            title: "Camera Error",
-            description: errorMsg
-          });
         }
       };
       
@@ -61,6 +72,7 @@ const CameraView: React.FC = () => {
     try {
       // First check if videoRef is actually available
       if (!videoRef.current) {
+        console.error('Video element not available during startCamera');
         throw new Error('Camera initialization failed - video element not ready');
       }
       
@@ -77,31 +89,57 @@ const CameraView: React.FC = () => {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       console.log('Camera access granted', stream);
       
-      // Check again to make sure videoRef is still available
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+      // Double check if videoRef is still available after async operation
+      if (!videoRef.current) {
+        console.error('Video element became unavailable after getting stream');
+        throw new Error('Camera initialization failed - video element no longer available');
+      }
+      
+      // Set stream to video element
+      videoRef.current.srcObject = stream;
+      
+      // Create a promise that resolves when metadata is loaded
+      const metadataLoaded = new Promise<void>((resolve) => {
+        if (!videoRef.current) {
+          resolve(); // Resolve anyway to avoid hanging
+          return;
+        }
+        
+        // Check if metadata is already loaded
+        if (videoRef.current.readyState >= 1) {
+          resolve();
+          return;
+        }
+        
+        // Set up event listener for metadata loading
         videoRef.current.onloadedmetadata = () => {
           console.log('Video metadata loaded');
+          resolve();
+        };
+      });
+      
+      // Wait for metadata to load with a timeout
+      await Promise.race([
+        metadataLoaded,
+        new Promise<void>((_, reject) => 
+          setTimeout(() => reject(new Error('Video metadata loading timed out')), 5000)
+        )
+      ]);
+      
+      // Start playing the video
+      if (videoRef.current) {
+        try {
+          await videoRef.current.play();
           setIsVideoReady(true);
           setCameraActive(true);
-        };
-        
-        // Set a timeout to detect if video never becomes ready
-        const timeoutId = setTimeout(() => {
-          if (!isVideoReady) {
-            console.warn('Video element failed to initialize in time');
-            toast({
-              variant: "default", // Changed from "warning" to "default"
-              title: "Camera is taking longer than expected",
-              description: "Please wait or try refreshing the page"
-            });
-          }
-        }, 5000);
-        
-        return () => clearTimeout(timeoutId);
-      } else {
-        throw new Error('Video element not available after stream initialization');
+        } catch (playError) {
+          console.error('Error playing video:', playError);
+          throw new Error('Could not play video stream');
+        }
       }
+      
+      // Success! Camera is now active
+      return true;
     } catch (err) {
       console.error('Error accessing camera:', err);
       let errorMessage = 'Could not access camera';
@@ -123,6 +161,7 @@ const CameraView: React.FC = () => {
       
       setCameraError(errorMessage);
       setCameraActive(false);
+      setIsVideoReady(false);
       toast({
         variant: "destructive",
         title: "Camera Error",
@@ -141,6 +180,8 @@ const CameraView: React.FC = () => {
         
         tracks.forEach(track => track.stop());
         videoRef.current.srcObject = null;
+        
+        // Reset states
         setIsVideoReady(false);
         setCameraActive(false);
       } catch (error) {
@@ -299,7 +340,12 @@ const CameraView: React.FC = () => {
                   {cameraError ? 'Camera access failed' : 'Camera access required'}
                 </p>
                 <Button
-                  onClick={startCamera}
+                  onClick={() => {
+                    setIsVideoReady(false);
+                    setCameraActive(false);
+                    setCameraError(null);
+                    requestAnimationFrame(() => startCamera());
+                  }}
                   variant="default"
                   className="pet-gradient px-6 py-3 rounded-full text-white shadow-md"
                 >

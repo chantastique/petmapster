@@ -25,7 +25,12 @@ const Camera = () => {
       return true;
     };
 
-    checkCameraSupport();
+    // Delay the camera support check slightly to ensure browser is ready
+    const timerId = setTimeout(() => {
+      checkCameraSupport();
+    }, 500);
+
+    return () => clearTimeout(timerId);
   }, []);
 
   if (browserSupport === false) {
@@ -48,7 +53,7 @@ const Camera = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <main className="flex-1 relative">
-        <CameraView />
+        {browserSupport && <CameraView />}
       </main>
       <Navbar />
     </div>
