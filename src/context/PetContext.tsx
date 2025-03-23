@@ -1,6 +1,9 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Pet, User, AppContextState, MapViewType } from '../types';
+import { useAuth } from './AuthContext';
+import { toast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 // Mock data for development
 const mockPets: Pet[] = [
@@ -84,6 +87,7 @@ export const usePetContext = () => useContext(PetContext);
 
 export const PetProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AppContextState>(initialState);
+  const { user, profile } = useAuth();
 
   // Load initial data
   useEffect(() => {
@@ -92,18 +96,32 @@ export const PetProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setState(prev => ({
         ...prev,
         pets: mockPets,
-        user: mockUser,
+        user: user ? {
+          id: user.id,
+          name: profile?.username || user.email?.split('@')[0] || 'Pet Spotter',
+          avatar: profile?.avatar_url || 'https://i.pravatar.cc/300',
+          petsSpotted: profile?.petsSpotted || mockUser.petsSpotted
+        } : null,
         isLoading: false
       }));
     }, 1000);
-  }, []);
+  }, [user, profile]);
 
   // Add a new pet
   const addPet = (petData: Omit<Pet, 'id' | 'userId' | 'timestamp'>) => {
+    if (!user) {
+      toast({
+        variant: "destructive",
+        title: "Authentication required",
+        description: "You need to be logged in to add pets."
+      });
+      return;
+    }
+
     const newPet: Pet = {
       ...petData,
       id: `pet-${Date.now()}`,
-      userId: state.user?.id || 'anonymous',
+      userId: user.id,
       timestamp: Date.now()
     };
     
@@ -115,6 +133,11 @@ export const PetProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         petsSpotted: (prev.user.petsSpotted || 0) + 1
       } : null
     }));
+
+    toast({
+      title: "Pet added!",
+      description: "Your pet sighting has been added successfully."
+    });
   };
   
   // Select a pet for details view

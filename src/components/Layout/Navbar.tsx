@@ -1,11 +1,14 @@
 
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Camera, Map, UserRound } from 'lucide-react';
+import { Camera, Map, UserRound, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/context/AuthContext';
+import { Button } from '@/components/ui/button';
 
 const Navbar = () => {
   const location = useLocation();
+  const { user, signOut } = useAuth();
   
   const isActive = (path: string) => {
     return location.pathname === path;
@@ -30,12 +33,33 @@ const Navbar = () => {
             isPrimary
           />
           
-          <NavItem 
-            to="/profile" 
-            icon={<UserRound />} 
-            label="Profile" 
-            isActive={isActive('/profile')} 
-          />
+          {user ? (
+            <div className="flex items-center gap-1">
+              <NavItem 
+                to="/profile" 
+                icon={<UserRound />} 
+                label="Profile" 
+                isActive={isActive('/profile')} 
+              />
+              
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => signOut()} 
+                className="text-muted-foreground hover:text-primary"
+                title="Sign out"
+              >
+                <LogOut className="h-5 w-5" />
+              </Button>
+            </div>
+          ) : (
+            <NavItem 
+              to="/auth" 
+              icon={<UserRound />} 
+              label="Sign In" 
+              isActive={isActive('/auth')} 
+            />
+          )}
         </div>
       </nav>
     </div>
