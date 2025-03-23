@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Camera, X, Cat, Dog, Sparkles, Check, AlertCircle, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -94,8 +95,15 @@ const CameraView: React.FC<CameraViewProps> = ({ onCameraReady }) => {
         return;
       }
       
+      // Make sure DOM is fully rendered
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Check again if component is still mounted after delay
+      if (!isMountedRef.current) return;
+      
       // Check if video element is available
       if (!videoRef.current) {
+        console.error('Video element not ready during initialization');
         if (isMountedRef.current) {
           setCameraError("Camera initialization failed - video element not ready");
           toast({
@@ -106,6 +114,8 @@ const CameraView: React.FC<CameraViewProps> = ({ onCameraReady }) => {
         }
         return;
       }
+      
+      console.log('Starting camera with video element:', videoRef.current);
       
       // Start camera access
       const success = await startCamera();
@@ -150,7 +160,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onCameraReady }) => {
         if (isMountedRef.current) {
           initCamera();
         }
-      }, 300);
+      }, 1000); // Increased delay for better DOM initialization
     }
     
     // Clean up camera resources when component unmounts or step changes
@@ -283,7 +293,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onCameraReady }) => {
             console.log('Camera failed to initialize within timeout');
             handleError();
           }
-        }, 3000);
+        }, 5000); // Increased timeout for slower devices
       });
     } catch (err) {
       console.error('Error accessing camera:', err);
